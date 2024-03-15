@@ -244,6 +244,31 @@ void helper_wrmsr(CPUX86State *env)
 
     cpu_svm_check_intercept_param(env, SVM_EXIT_MSR, 1, GETPC());
 
+    // Unicorn: call registered WRMSR hooks
+    struct hook *hook;
+    int skip;
+
+    HOOK_FOREACH_VAR_DECLARE;
+    HOOK_FOREACH(env->uc, hook, UC_HOOK_INSN) {
+        if (hook->to_delete)
+            continue;
+        if (!HOOK_BOUND_CHECK(hook, env->eip))
+            continue;
+
+        // Multiple cpuid callbacks returning different values is undefined.
+        // true -> skip the cpuid instruction
+        if (hook->insn == UC_X86_INS_WRMSR)
+            skip = ((uc_cb_insn_cpuid_t)hook->callback)(env->uc, hook->user_data);
+
+        // the last callback may already asked to stop emulation
+        if (env->uc->stop_request)
+            break;
+    }
+
+    if (skip)
+        return;
+    // END Unicorn
+
     val = ((uint32_t)env->regs[R_EAX]) |
         ((uint64_t)((uint32_t)env->regs[R_EDX]) << 32);
 
@@ -404,6 +429,31 @@ void helper_rdmsr(CPUX86State *env)
     uint64_t val;
 
     cpu_svm_check_intercept_param(env, SVM_EXIT_MSR, 0, GETPC());
+
+    // Unicorn: call registered RDMSR hooks
+    struct hook *hook;
+    int skip;
+
+    HOOK_FOREACH_VAR_DECLARE;
+    HOOK_FOREACH(env->uc, hook, UC_HOOK_INSN) {
+        if (hook->to_delete)
+            continue;
+        if (!HOOK_BOUND_CHECK(hook, env->eip))
+            continue;
+
+        // Multiple cpuid callbacks returning different values is undefined.
+        // true -> skip the cpuid instruction
+        if (hook->insn == UC_X86_INS_RDMSR)
+            skip = ((uc_cb_insn_cpuid_t)hook->callback)(env->uc, hook->user_data);
+
+        // the last callback may already asked to stop emulation
+        if (env->uc->stop_request)
+            break;
+    }
+
+    if (skip)
+        return;
+    // END Unicorn
 
     switch ((uint32_t)env->regs[R_ECX]) {
     case MSR_IA32_SYSENTER_CS:
