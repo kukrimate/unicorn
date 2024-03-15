@@ -69,6 +69,7 @@ static void reg_reset(struct uc_struct *uc)
 {
     CPUArchState *env = uc->cpu->env_ptr;
 
+#if 0
     memset(env->regs, 0, sizeof(env->regs));
     memset(env->segs, 0, sizeof(env->segs));
     memset(env->cr, 0, sizeof(env->cr));
@@ -168,6 +169,8 @@ static void reg_reset(struct uc_struct *uc)
         env->features[FEAT_8000_0001_EDX] |= CPUID_EXT2_LM;
         break;
     }
+#endif
+    env->hflags |= HF_LMA_MASK;
 }
 
 static int x86_msr_read(CPUX86State *env, uc_x86_msr *msr)
