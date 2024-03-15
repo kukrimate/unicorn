@@ -69,6 +69,7 @@ void x86_reg_reset(struct uc_struct *uc)
 {
     CPUArchState *env = uc->cpu->env_ptr;
 
+#if 0
     env->features[FEAT_1_EDX] = CPUID_CX8 | CPUID_CMOV | CPUID_SSE2 |
                                 CPUID_FXSR | CPUID_SSE | CPUID_CLFLUSH;
     env->features[FEAT_1_ECX] = CPUID_EXT_SSSE3 | CPUID_EXT_SSE41 |
@@ -179,6 +180,8 @@ void x86_reg_reset(struct uc_struct *uc)
         env->features[FEAT_8000_0001_EDX] |= CPUID_EXT2_LM;
         break;
     }
+#endif
+    env->hflags |= HF_LMA_MASK;
 }
 
 static int x86_msr_read(CPUX86State *env, uc_x86_msr *msr)
