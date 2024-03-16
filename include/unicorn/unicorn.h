@@ -437,6 +437,13 @@ typedef void (*uc_cb_hookmem_t)(uc_engine *uc, uc_mem_type type,
 typedef bool (*uc_cb_eventmem_t)(uc_engine *uc, uc_mem_type type,
                                  uint64_t address, int size, int64_t value,
                                  void *user_data);
+/*
+  serialice-unicorn: Change the type of the unmapped read handler to allow injecting a value
+ */
+typedef bool (*uc_cb_unmapped_read_t)(uc_engine *uc, uc_mem_type type,
+                                 uint64_t address, int size, int64_t value,
+                                 void *user_data, uint64_t *result);
+
 
 /*
   Memory region mapped by uc_mem_map() and uc_mem_map_ptr()

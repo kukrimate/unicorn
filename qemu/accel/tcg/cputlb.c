@@ -1437,6 +1437,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
     HOOK_FOREACH_VAR_DECLARE;
     struct uc_struct *uc = env->uc;
     MemoryRegion *mr = memory_mapping(uc, addr);
+    uint64_t unmapped_read_result;
 
     // memory might be still unmapped while reading or fetching
     if (mr == NULL) {
@@ -1466,7 +1467,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
                         continue;
                     if (!HOOK_BOUND_CHECK(hook, addr))
                         continue;
-                    if ((handled = ((uc_cb_eventmem_t)hook->callback)(uc, UC_MEM_READ_UNMAPPED, addr, size, 0, hook->user_data)))
+                    if ((handled = ((uc_cb_unmapped_read_t)hook->callback)(uc, UC_MEM_READ_UNMAPPED, addr, size, 0, hook->user_data, &unmapped_read_result)))
                         break;
 
                     // the last callback may already asked to stop emulation
@@ -1479,18 +1480,9 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
         }
 
         if (handled) {
+            // serialice-unicorn: Assume the UC_HOOK_MEM_READ_UNMAPPED handler injected a value
             uc->invalid_error = UC_ERR_OK;
-            mr = memory_mapping(uc, addr);
-            if (mr == NULL) {
-                uc->invalid_error = UC_ERR_MAP;
-                cpu_exit(uc->cpu);
-                // XXX(@lazymio): We have to exit early so that the target register won't be overwritten
-                //                because qemu might generate tcg code like:
-                //                       qemu_ld_i64 x0,x1,leq,8  sync: 0  dead: 0 1
-                //                where we don't have a change to recover x0 value
-                cpu_loop_exit(uc->cpu);
-                return 0;
-            }
+            return unmapped_read_result;
         } else {
             uc->invalid_addr = addr;
             uc->invalid_error = error_code;
@@ -2036,13 +2028,9 @@ store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
             cpu_exit(uc->cpu);
             return;
         } else {
+            // serialice-unicorn: assume the UC_HOOK_MEM_WRITE_UNMAPPED sent the write it should go, and we can return
             uc->invalid_error = UC_ERR_OK;
-            mr = memory_mapping(uc, addr);
-            if (mr == NULL) {
-                uc->invalid_error = UC_ERR_MAP;
-                cpu_exit(uc->cpu);
-                return;
-            }
+            return;
         }
     }
 
