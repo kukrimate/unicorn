@@ -896,6 +896,7 @@ typedef enum uc_prot {
     UC_PROT_WRITE = 2,
     UC_PROT_EXEC = 4,
     UC_PROT_ALL = 7,
+    UC_PROT_ROM = 8
 } uc_prot;
 
 /*

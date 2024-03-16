@@ -635,6 +635,10 @@ uc_err uc_mem_write(uc_engine *uc, uint64_t address, const void *_bytes,
         MemoryRegion *mr = memory_mapping(uc, address);
         if (mr) {
             uint32_t operms = mr->perms;
+
+            if (operms & UC_PROT_ROM)
+                goto discard_write;
+
             if (!(operms & UC_PROT_WRITE)) { // write protected
                 // but this is not the program accessing memory, so temporarily
                 // mark writable
@@ -651,6 +655,8 @@ uc_err uc_mem_write(uc_engine *uc, uint64_t address, const void *_bytes,
                 // now write protect it again
                 uc->readonly_mem(mr, true);
             }
+
+discard_write:
 
             count += len;
             address += len;
@@ -1032,7 +1038,7 @@ static uc_err mem_map_check(uc_engine *uc, uint64_t address, size_t size,
     }
 
     // check for only valid permissions
-    if ((perms & ~UC_PROT_ALL) != 0) {
+    if ((perms & ~(UC_PROT_ALL | UC_PROT_ROM)) != 0) {
         return UC_ERR_ARG;
     }
 
@@ -1405,7 +1411,7 @@ uc_err uc_mem_protect(struct uc_struct *uc, uint64_t address, size_t size,
     }
 
     // check for only valid permissions
-    if ((perms & ~UC_PROT_ALL) != 0) {
+    if ((perms & ~(UC_PROT_ALL | UC_PROT_ROM)) != 0) {
         return UC_ERR_ARG;
     }
 
@@ -1437,7 +1443,8 @@ uc_err uc_mem_protect(struct uc_struct *uc, uint64_t address, size_t size,
                 remove_exec = true;
             }
             mr->perms = perms;
-            uc->readonly_mem(mr, (perms & UC_PROT_WRITE) == 0);
+            uc->readonly_mem(mr, (perms & UC_PROT_WRITE) == 0 ||
+                                 (perms & UC_PROT_ROM) != 0);
 
         } else {
             if (!split_mmio_region(uc, mr, addr, len, false)) {

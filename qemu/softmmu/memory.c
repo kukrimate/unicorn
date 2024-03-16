@@ -64,6 +64,8 @@ MemoryRegion *memory_map_ptr(struct uc_struct *uc, hwaddr begin, size_t size, ui
 
     memory_region_init_ram_ptr(uc, ram, size, ptr);
     ram->perms = perms;
+    if (!(ram->perms & UC_PROT_WRITE) || ram->perms & UC_PROT_ROM)
+        ram->readonly = true;
     if (ram->addr == -1 || !ram->ram_block) {
         // out of memory
         g_free(ram);
@@ -1337,7 +1339,7 @@ void memory_region_init_ram(struct uc_struct *uc,
 {
     memory_region_init(uc, mr, size);
     mr->ram = true;
-    if (!(perms & UC_PROT_WRITE)) {
+    if (!(perms & UC_PROT_WRITE) || perms & UC_PROT_ROM) {
         mr->readonly = true;
     }
     mr->perms = perms;
