@@ -1439,6 +1439,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
     HOOK_FOREACH_VAR_DECLARE;
     struct uc_struct *uc = env->uc;
     MemoryRegion *mr;
+    uint64_t unmapped_read_result;
 
     /* Handle CPU specific unaligned behaviour */
     if (addr & ((1 << a_bits) - 1)) {
@@ -1476,7 +1477,7 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
                     if (!HOOK_BOUND_CHECK(hook, paddr))
                         continue;
                     JIT_CALLBACK_GUARD_VAR(handled,
-                                           ((uc_cb_eventmem_t)hook->callback)(uc, UC_MEM_FETCH_UNMAPPED, paddr, size, 0, hook->user_data));
+                                           ((uc_cb_unmapped_read_t)hook->callback)(uc, UC_MEM_FETCH_UNMAPPED, paddr, size, 0, hook->user_data, &unmapped_read_result));
                     if (handled)
                         break;
 
@@ -1492,8 +1493,8 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
                         continue;
                     if (!HOOK_BOUND_CHECK(hook, paddr))
                         continue;
-                    JIT_CALLBACK_GUARD_VAR(handled, 
-                                           ((uc_cb_eventmem_t)hook->callback)(uc, UC_MEM_READ_UNMAPPED, paddr, size, 0, hook->user_data));
+                    JIT_CALLBACK_GUARD_VAR(handled,
+                                           ((uc_cb_unmapped_read_t)hook->callback)(uc, UC_MEM_READ_UNMAPPED, paddr, size, 0, hook->user_data, &unmapped_read_result));
                     if (handled)
                         break;
 
@@ -1507,33 +1508,9 @@ load_helper(CPUArchState *env, target_ulong addr, TCGMemOpIdx oi,
         }
 
         if (handled) {
+            // serialice-unicorn: Assume the UC_HOOK_MEM_READ_UNMAPPED handler injected a value
             uc->invalid_error = UC_ERR_OK;
-            /* If the TLB entry is for a different page, reload and try again.  */
-            if (!tlb_hit(env->uc, tlb_addr, addr)) {
-                if (!victim_tlb_hit(env, mmu_idx, index, tlb_off,
-                                    addr & TARGET_PAGE_MASK)) {
-                    tlb_fill(env_cpu(env), addr, size,
-                             access_type, mmu_idx, retaddr);
-                    index = tlb_index(env, mmu_idx, addr);
-                    entry = tlb_entry(env, mmu_idx, addr);
-                }
-                tlb_addr = code_read ? entry->addr_code : entry->addr_read;
-                tlb_addr &= ~TLB_INVALID_MASK;
-            }
-            paddr = entry->paddr | (addr & ~TARGET_PAGE_MASK);
-            mr = uc->memory_mapping(uc, paddr);
-            if (mr == NULL) {
-                uc->invalid_error = UC_ERR_MAP;
-                if (uc->nested_level > 0 && !uc->cpu->stopped) {
-                    cpu_exit(uc->cpu);
-                    // XXX(@lazymio): We have to exit early so that the target register won't be overwritten
-                    //                because qemu might generate tcg code like:
-                    //                       qemu_ld_i64 x0,x1,leq,8  sync: 0  dead: 0 1
-                    //                where we don't have a change to recover x0 value
-                    cpu_loop_exit(uc->cpu);
-                }
-                return 0;
-            }
+            return unmapped_read_result;
         } else {
             uc->invalid_addr = paddr;
             uc->invalid_error = error_code;
@@ -2102,25 +2079,9 @@ store_helper(CPUArchState *env, target_ulong addr, uint64_t val,
             cpu_exit(uc->cpu);
             return;
         } else {
+            // serialice-unicorn: assume the UC_HOOK_MEM_WRITE_UNMAPPED sent the write it should go, and we can return
             uc->invalid_error = UC_ERR_OK;
-            /* If the TLB entry is for a different page, reload and try again.  */
-            if (!tlb_hit(env->uc, tlb_addr, addr)) {
-                if (!victim_tlb_hit(env, mmu_idx, index, tlb_off,
-                    addr & TARGET_PAGE_MASK)) {
-                    tlb_fill(env_cpu(env), addr, size, MMU_DATA_STORE,
-                             mmu_idx, retaddr);
-                    index = tlb_index(env, mmu_idx, addr);
-                    entry = tlb_entry(env, mmu_idx, addr);
-                }
-                tlb_addr = tlb_addr_write(entry) & ~TLB_INVALID_MASK;
-            }
-            paddr = entry->paddr | (addr & ~TARGET_PAGE_MASK);
-            mr = uc->memory_mapping(uc, paddr);
-            if (mr == NULL) {
-                uc->invalid_error = UC_ERR_MAP;
-                cpu_exit(uc->cpu);
-                return;
-            }
+            return;
         }
     }
 
