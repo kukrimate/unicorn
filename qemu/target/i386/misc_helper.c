@@ -212,6 +212,31 @@ void helper_rdtsc(CPUX86State *env)
     }
     cpu_svm_check_intercept_param(env, SVM_EXIT_RDTSC, 0, GETPC());
 
+    // Unicorn: call registered RDTSC hooks
+    struct hook *hook;
+    int skip;
+
+    HOOK_FOREACH_VAR_DECLARE;
+    HOOK_FOREACH(env->uc, hook, UC_HOOK_INSN) {
+        if (hook->to_delete)
+            continue;
+        if (!HOOK_BOUND_CHECK(hook, env->eip))
+            continue;
+
+        // Multiple callbacks returning different values is undefined.
+        // true -> skip the instruction
+        if (hook->insn == UC_X86_INS_RDTSC)
+            skip = ((uc_cb_insn_cpuid_t)hook->callback)(env->uc, hook->user_data);
+
+        // the last callback may already asked to stop emulation
+        if (env->uc->stop_request)
+            break;
+    }
+
+    if (skip)
+        return;
+    // END Unicorn
+
     val = cpu_get_tsc(env) + env->tsc_offset;
     env->regs[R_EAX] = (uint32_t)(val);
     env->regs[R_EDX] = (uint32_t)(val >> 32);
@@ -219,6 +244,31 @@ void helper_rdtsc(CPUX86State *env)
 
 void helper_rdtscp(CPUX86State *env)
 {
+    // Unicorn: call registered RDTSCP hooks
+    struct hook *hook;
+    int skip;
+
+    HOOK_FOREACH_VAR_DECLARE;
+    HOOK_FOREACH(env->uc, hook, UC_HOOK_INSN) {
+        if (hook->to_delete)
+            continue;
+        if (!HOOK_BOUND_CHECK(hook, env->eip))
+            continue;
+
+        // Multiple callbacks returning different values is undefined.
+        // true -> skip the instruction
+        if (hook->insn == UC_X86_INS_RDTSCP)
+            skip = ((uc_cb_insn_cpuid_t)hook->callback)(env->uc, hook->user_data);
+
+        // the last callback may already asked to stop emulation
+        if (env->uc->stop_request)
+            break;
+    }
+
+    if (skip)
+        return;
+    // END Unicorn
+
     helper_rdtsc(env);
     env->regs[R_ECX] = (uint32_t)(env->tsc_aux);
 }
